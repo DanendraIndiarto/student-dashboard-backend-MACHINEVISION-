@@ -1,0 +1,584 @@
+[
+    {
+        "id": "tab_student_dashboard",
+        "type": "tab",
+        "label": "API Student Dashboard",
+        "disabled": false
+    },
+    {
+        "id": "in_cors_options",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "OPTIONS /nendra/dashboard/*",
+        "url": "/nendra/dashboard/*",
+        "method": "options",
+        "upload": false,
+        "x": 200,
+        "y": 40,
+        "wires": [
+            [
+                "fn_cors_ok"
+            ]
+        ]
+    },
+    {
+        "id": "fn_cors_ok",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "CORS Preflight 204",
+        "func": "msg.statusCode = 204;\nmsg.payload = '';\nreturn msg;",
+        "outputs": 1,
+        "x": 460,
+        "y": 40,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "in_overview",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "GET /nendra/dashboard/overview",
+        "url": "/nendra/dashboard/overview",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 190,
+        "y": 100,
+        "wires": [
+            [
+                "fn_overview_query"
+            ]
+        ]
+    },
+    {
+        "id": "fn_overview_query",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Build Overview SQL",
+        "func": "msg.query = `\nSELECT\n  (SELECT row_to_json(s) FROM (SELECT admin_name, school_name, academic_year, semester FROM app_settings WHERE id = 1) s) AS greeting,\n  (SELECT json_build_object(\n    'total_siswa', COUNT(*)::int,\n    'siswa_perempuan', COUNT(*) FILTER (WHERE jenis_kelamin = 'Perempuan')::int,\n    'siswa_laki_laki', COUNT(*) FILTER (WHERE jenis_kelamin = 'Laki-laki')::int,\n    'total_kelas', COUNT(DISTINCT kelas)::int\n  ) FROM students) AS stats,\n  (SELECT COALESCE(json_agg(t), '[]'::json) FROM (SELECT id, nis, nama, kelas, jenis_kelamin, status FROM students ORDER BY created_at ASC LIMIT 5) t) AS top_students,\n  (SELECT COALESCE(json_agg(i), '[]'::json) FROM (SELECT id, nis, nama, kelas, jenis_kelamin, status FROM students WHERE status = 'Tidak Aktif' ORDER BY nama ASC) i) AS inactive_students;\n`;\nreturn msg;",
+        "outputs": 1,
+        "x": 450,
+        "y": 100,
+        "wires": [
+            [
+                "pg_overview"
+            ]
+        ]
+    },
+    {
+        "id": "pg_overview",
+        "type": "postgresql",
+        "z": "tab_student_dashboard",
+        "name": "Exec Overview",
+        "query": "",
+        "postgreSQLConfig": "pg_config_directus",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 660,
+        "y": 100,
+        "wires": [
+            [
+                "fn_overview_res"
+            ]
+        ]
+    },
+    {
+        "id": "fn_overview_res",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Format Overview JSON",
+        "func": "const row = msg.payload[0] || {};\nmsg.statusCode = 200;\nmsg.payload = {\n    success: true,\n    data: {\n        greeting: row.greeting || {},\n        stats: row.stats || { total_siswa: 0, siswa_perempuan: 0, siswa_laki_laki: 0, total_kelas: 0 },\n        top_students: row.top_students || [],\n        inactive_students: row.inactive_students || []\n    }\n};\nreturn msg;",
+        "outputs": 1,
+        "x": 880,
+        "y": 100,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "in_students_get",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "GET /nendra/dashboard/students",
+        "url": "/nendra/dashboard/students",
+        "method": "get",
+        "upload": false,
+        "x": 190,
+        "y": 200,
+        "wires": [
+            [
+                "fn_students_get_sql"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_get_sql",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Build Search & Pagination SQL",
+        "func": "const page = Math.max(1, parseInt(msg.req.query.page) || 1);\nconst rawLimit = parseInt(msg.req.query.limit) || 5;\nconst limit = [5, 10].includes(rawLimit) ? rawLimit : 5;\nconst offset = (page - 1) * limit;\nconst search = (msg.req.query.search || '').trim().replace(/'/g, \"''\");\n\nmsg.meta_req = { page, limit };\n\nconst whereClause = search \n  ? `WHERE nama ILIKE '%${search}%' OR nis ILIKE '%${search}%' OR kelas ILIKE '%${search}%' OR jenis_kelamin ILIKE '%${search}%'`\n  : '';\n\nmsg.query = `\nSELECT\n  (SELECT COUNT(*)::int FROM students ${whereClause}) AS total_items,\n  (SELECT COALESCE(json_agg(row_data), '[]'::json) FROM (\n    SELECT id, nis, nama, kelas, jenis_kelamin, status\n    FROM students\n    ${whereClause}\n    ORDER BY created_at DESC\n    LIMIT ${limit} OFFSET ${offset}\n  ) row_data) AS items;\n`;\nreturn msg;",
+        "outputs": 1,
+        "x": 470,
+        "y": 200,
+        "wires": [
+            [
+                "pg_students_get"
+            ]
+        ]
+    },
+    {
+        "id": "pg_students_get",
+        "type": "postgresql",
+        "z": "tab_student_dashboard",
+        "name": "Exec Get Students",
+        "query": "",
+        "postgreSQLConfig": "pg_config_directus",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 710,
+        "y": 200,
+        "wires": [
+            [
+                "fn_students_get_res"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_get_res",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Format Students List",
+        "func": "const row = msg.payload[0] || { total_items: 0, items: [] };\nconst { page, limit } = msg.meta_req;\nconst total_pages = Math.max(1, Math.ceil(row.total_items / limit));\n\nmsg.statusCode = 200;\nmsg.payload = {\n    success: true,\n    data: row.items,\n    meta: {\n        page,\n        limit,\n        total_items: row.total_items,\n        total_pages\n    }\n};\nreturn msg;",
+        "outputs": 1,
+        "x": 920,
+        "y": 200,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "in_students_post",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "POST /nendra/dashboard/students",
+        "url": "/nendra/dashboard/students",
+        "method": "post",
+        "upload": false,
+        "x": 190,
+        "y": 300,
+        "wires": [
+            [
+                "fn_students_post_val"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_post_val",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Validate & Insert Student",
+        "func": "const b = msg.payload || {};\nconst errors = {};\n\nif (!b.nis || !String(b.nis).trim()) errors.nis = 'NIS wajib diisi';\nif (!b.nama || !String(b.nama).trim()) errors.nama = 'Nama wajib diisi';\nif (!b.kelas || !String(b.kelas).trim()) errors.kelas = 'Kelas wajib diisi';\nif (!['Laki-laki', 'Perempuan'].includes(b.jenis_kelamin)) errors.jenis_kelamin = 'Jenis kelamin harus Laki-laki atau Perempuan';\nif (!['Aktif', 'Tidak Aktif'].includes(b.status)) errors.status = 'Status harus Aktif atau Tidak Aktif';\n\nif (Object.keys(errors).length > 0) {\n    msg.statusCode = 400;\n    msg.payload = { success: false, message: 'Validasi gagal', errors };\n    return [null, msg];\n}\n\nconst esc = (v) => String(v).trim().replace(/'/g, \"''\");\nmsg.query = `\nINSERT INTO students (nis, nama, kelas, jenis_kelamin, status)\nVALUES ('${esc(b.nis)}', '${esc(b.nama)}', '${esc(b.kelas)}', '${esc(b.jenis_kelamin)}', '${esc(b.status)}')\nRETURNING id, nis, nama, kelas, jenis_kelamin, status;\n`;\nreturn [msg, null];",
+        "outputs": 2,
+        "x": 460,
+        "y": 300,
+        "wires": [
+            [
+                "pg_students_post"
+            ],
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "pg_students_post",
+        "type": "postgresql",
+        "z": "tab_student_dashboard",
+        "name": "Exec Insert Student",
+        "query": "",
+        "postgreSQLConfig": "pg_config_directus",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 700,
+        "y": 290,
+        "wires": [
+            [
+                "fn_students_post_res"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_post_res",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Format Created",
+        "func": "msg.statusCode = 201;\nmsg.payload = {\n    success: true,\n    message: 'Data siswa berhasil ditambahkan',\n    data: msg.payload[0]\n};\nreturn msg;",
+        "outputs": 1,
+        "x": 900,
+        "y": 290,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "in_students_patch",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "PATCH /nendra/dashboard/students/:id",
+        "url": "/nendra/dashboard/students/:id",
+        "method": "patch",
+        "upload": false,
+        "x": 210,
+        "y": 400,
+        "wires": [
+            [
+                "fn_students_patch_val"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_patch_val",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Validate & Update Student",
+        "func": "const id = (msg.req.params.id || '').replace(/'/g, \"''\");\nconst b = msg.payload || {};\nconst errors = {};\n\nif (!b.nis || !String(b.nis).trim()) errors.nis = 'NIS wajib diisi';\nif (!b.nama || !String(b.nama).trim()) errors.nama = 'Nama wajib diisi';\nif (!b.kelas || !String(b.kelas).trim()) errors.kelas = 'Kelas wajib diisi';\nif (!['Laki-laki', 'Perempuan'].includes(b.jenis_kelamin)) errors.jenis_kelamin = 'Jenis kelamin harus Laki-laki atau Perempuan';\nif (!['Aktif', 'Tidak Aktif'].includes(b.status)) errors.status = 'Status harus Aktif atau Tidak Aktif';\n\nif (Object.keys(errors).length > 0) {\n    msg.statusCode = 400;\n    msg.payload = { success: false, message: 'Validasi gagal', errors };\n    return [null, msg];\n}\n\nconst esc = (v) => String(v).trim().replace(/'/g, \"''\");\nmsg.query = `\nUPDATE students\nSET nis = '${esc(b.nis)}', nama = '${esc(b.nama)}', kelas = '${esc(b.kelas)}', jenis_kelamin = '${esc(b.jenis_kelamin)}', status = '${esc(b.status)}', updated_at = NOW()\nWHERE id = '${id}'\nRETURNING id, nis, nama, kelas, jenis_kelamin, status;\n`;\nreturn [msg, null];",
+        "outputs": 2,
+        "x": 480,
+        "y": 400,
+        "wires": [
+            [
+                "pg_students_patch"
+            ],
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "pg_students_patch",
+        "type": "postgresql",
+        "z": "tab_student_dashboard",
+        "name": "Exec Update Student",
+        "query": "",
+        "postgreSQLConfig": "pg_config_directus",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 720,
+        "y": 390,
+        "wires": [
+            [
+                "fn_students_patch_res"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_patch_res",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Format Updated",
+        "func": "if (!msg.payload || msg.payload.length === 0) {\n    msg.statusCode = 404;\n    msg.payload = { success: false, message: 'Data siswa tidak ditemukan' };\n    return msg;\n}\nmsg.statusCode = 200;\nmsg.payload = {\n    success: true,\n    message: 'Data siswa berhasil diperbarui',\n    data: msg.payload[0]\n};\nreturn msg;",
+        "outputs": 1,
+        "x": 920,
+        "y": 390,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "in_students_delete",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "DELETE /nendra/dashboard/students/:id",
+        "url": "/nendra/dashboard/students/:id",
+        "method": "delete",
+        "upload": false,
+        "x": 210,
+        "y": 500,
+        "wires": [
+            [
+                "fn_students_del_sql"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_del_sql",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Delete Student SQL",
+        "func": "const id = (msg.req.params.id || '').replace(/'/g, \"''\");\nmsg.query = `DELETE FROM students WHERE id = '${id}' RETURNING id;`;\nreturn msg;",
+        "outputs": 1,
+        "x": 470,
+        "y": 500,
+        "wires": [
+            [
+                "pg_students_del"
+            ]
+        ]
+    },
+    {
+        "id": "pg_students_del",
+        "type": "postgresql",
+        "z": "tab_student_dashboard",
+        "name": "Exec Delete Student",
+        "query": "",
+        "postgreSQLConfig": "pg_config_directus",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 690,
+        "y": 500,
+        "wires": [
+            [
+                "fn_students_del_res"
+            ]
+        ]
+    },
+    {
+        "id": "fn_students_del_res",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Format Deleted",
+        "func": "if (!msg.payload || msg.payload.length === 0) {\n    msg.statusCode = 404;\n    msg.payload = { success: false, message: 'Data siswa tidak ditemukan' };\n    return msg;\n}\nmsg.statusCode = 200;\nmsg.payload = { success: true, message: 'Data siswa berhasil dihapus' };\nreturn msg;",
+        "outputs": 1,
+        "x": 900,
+        "y": 500,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "in_settings_get",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "GET /nendra/dashboard/settings",
+        "url": "/nendra/dashboard/settings",
+        "method": "get",
+        "upload": false,
+        "x": 190,
+        "y": 600,
+        "wires": [
+            [
+                "fn_settings_get_sql"
+            ]
+        ]
+    },
+    {
+        "id": "fn_settings_get_sql",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Get Settings SQL",
+        "func": "msg.query = `SELECT admin_name, admin_email, school_name, academic_year, semester FROM app_settings WHERE id = 1;`;\nreturn msg;",
+        "outputs": 1,
+        "x": 450,
+        "y": 600,
+        "wires": [
+            [
+                "pg_settings_get"
+            ]
+        ]
+    },
+    {
+        "id": "pg_settings_get",
+        "type": "postgresql",
+        "z": "tab_student_dashboard",
+        "name": "Exec Get Settings",
+        "query": "",
+        "postgreSQLConfig": "pg_config_directus",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 670,
+        "y": 600,
+        "wires": [
+            [
+                "fn_settings_get_res"
+            ]
+        ]
+    },
+    {
+        "id": "fn_settings_get_res",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Format Settings",
+        "func": "msg.statusCode = 200;\nmsg.payload = {\n    success: true,\n    data: msg.payload[0] || {}\n};\nreturn msg;",
+        "outputs": 1,
+        "x": 880,
+        "y": 600,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "in_settings_patch",
+        "type": "http in",
+        "z": "tab_student_dashboard",
+        "name": "PATCH /nendra/dashboard/settings",
+        "url": "/nendra/dashboard/settings",
+        "method": "patch",
+        "upload": false,
+        "x": 200,
+        "y": 700,
+        "wires": [
+            [
+                "fn_settings_patch_val"
+            ]
+        ]
+    },
+    {
+        "id": "fn_settings_patch_val",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Validate & Update Settings",
+        "func": "const b = msg.payload || {};\nconst errors = {};\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n\nif (!b.admin_name || !String(b.admin_name).trim()) errors.admin_name = 'Nama pengguna wajib diisi';\nif (!b.admin_email || !emailRegex.test(String(b.admin_email).trim())) errors.admin_email = 'Format email tidak valid';\nif (!b.school_name || !String(b.school_name).trim()) errors.school_name = 'Nama sekolah wajib diisi';\nif (!b.academic_year || !String(b.academic_year).trim()) errors.academic_year = 'Tahun ajaran wajib diisi';\nif (!['Ganjil', 'Genap'].includes(b.semester)) errors.semester = 'Semester harus Ganjil atau Genap';\n\nif (Object.keys(errors).length > 0) {\n    msg.statusCode = 400;\n    msg.payload = { success: false, message: 'Validasi gagal', errors };\n    return [null, msg];\n}\n\nconst esc = (v) => String(v).trim().replace(/'/g, \"''\");\nmsg.query = `\nUPDATE app_settings\nSET admin_name = '${esc(b.admin_name)}', admin_email = '${esc(b.admin_email)}', school_name = '${esc(b.school_name)}', academic_year = '${esc(b.academic_year)}', semester = '${esc(b.semester)}', updated_at = NOW()\nWHERE id = 1\nRETURNING admin_name, admin_email, school_name, academic_year, semester;\n`;\nreturn [msg, null];",
+        "outputs": 2,
+        "x": 470,
+        "y": 700,
+        "wires": [
+            [
+                "pg_settings_patch"
+            ],
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "pg_settings_patch",
+        "type": "postgresql",
+        "z": "tab_student_dashboard",
+        "name": "Exec Update Settings",
+        "query": "",
+        "postgreSQLConfig": "pg_config_directus",
+        "split": false,
+        "rowsPerMsg": 1,
+        "outputs": 1,
+        "x": 710,
+        "y": 690,
+        "wires": [
+            [
+                "fn_settings_patch_res"
+            ]
+        ]
+    },
+    {
+        "id": "fn_settings_patch_res",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Format Settings Updated",
+        "func": "msg.statusCode = 200;\nmsg.payload = {\n    success: true,\n    message: 'Pengaturan berhasil disimpan',\n    data: msg.payload[0]\n};\nreturn msg;",
+        "outputs": 1,
+        "x": 940,
+        "y": 690,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "catch_db_err",
+        "type": "catch",
+        "z": "tab_student_dashboard",
+        "name": "Catch DB Errors (Duplicate NIS / UUID)",
+        "scope": [
+            "pg_students_post",
+            "pg_students_patch",
+            "pg_students_del",
+            "pg_overview",
+            "pg_students_get",
+            "pg_settings_get",
+            "pg_settings_patch"
+        ],
+        "uncaught": false,
+        "x": 240,
+        "y": 800,
+        "wires": [
+            [
+                "fn_handle_db_err"
+            ]
+        ]
+    },
+    {
+        "id": "fn_handle_db_err",
+        "type": "function",
+        "z": "tab_student_dashboard",
+        "name": "Handle Unique & Syntax Error",
+        "func": "const errMsg = (msg.error && msg.error.message) ? msg.error.message : 'Internal Server Error';\n\nif (errMsg.includes('unique constraint') || errMsg.includes('students_nis_key')) {\n    msg.statusCode = 400;\n    msg.payload = {\n        success: false,\n        message: 'Validasi gagal',\n        errors: { nis: 'NIS sudah terdaftar pada siswa lain' }\n    };\n} else if (errMsg.includes('invalid input syntax for type uuid')) {\n    msg.statusCode = 400;\n    msg.payload = {\n        success: false,\n        message: 'Format ID siswa (UUID) tidak valid'\n    };\n} else {\n    msg.statusCode = 500;\n    msg.payload = {\n        success: false,\n        message: 'Terjadi kesalahan pada database',\n        detail: errMsg\n    };\n}\nreturn msg;",
+        "outputs": 1,
+        "x": 560,
+        "y": 800,
+        "wires": [
+            [
+                "http_out_main"
+            ]
+        ]
+    },
+    {
+        "id": "http_out_main",
+        "type": "http response",
+        "z": "tab_student_dashboard",
+        "name": "HTTP JSON Response",
+        "statusCode": "",
+        "headers": {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization"
+        },
+        "x": 1160,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "pg_config_directus",
+        "type": "postgreSQLConfig",
+        "name": "Directus PostgreSQL",
+        "host": "directus-docker-database-1",
+        "hostFieldType": "str",
+        "port": 5432,
+        "portFieldType": "num",
+        "database": "directus",
+        "databaseFieldType": "str",
+        "ssl": "false",
+        "sslFieldType": "bool",
+        "applicationName": "",
+        "applicationNameType": "str",
+        "max": 10,
+        "maxFieldType": "num",
+        "idle": 1000,
+        "idleFieldType": "num",
+        "connectionTimeout": "",
+        "connectionTimeoutFieldType": "num",
+        "userFieldType": "cred",
+        "userEnv": "",
+        "passwordFieldType": "cred",
+        "passwordEnv": ""
+    },
+    {
+        "id": "465ed6dbe02a8ddf",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-postgresql": "0.16.2"
+        }
+    }
+]

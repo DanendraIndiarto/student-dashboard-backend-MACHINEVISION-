@@ -1,0 +1,265 @@
+{
+  "info": {
+    "_postman_id": "c62be364-db4c-4ed1-8099-b0670cebdeeb",
+    "name": "Student Dashboard API (Intern Task 1)",
+    "description": "Dokumentasi & kontrak REST API untuk Student Dashboard dengan prefix /nendra/dashboard.\n\nCara Pakai (Untuk Tim Frontend):\n1. Buka tab Variables pada Collection ini.\n2. Sesuaikan nilai base_url (gunakan http://localhost:1880 jika di lokal, atau ganti dengan IP/domain server backend).\n3. Semua request menggunakan variabel {{base_url}}{{api_prefix}} secara otomatis.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "52173609",
+    "_collection_link": "https://go.postman.co/collection/52173609-c62be364-db4c-4ed1-8099-b0670cebdeeb?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "1. Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/{{api_prefix}}/overview",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "{{api_prefix}}",
+                "overview"
+              ]
+            },
+            "description": "Mengambil sapaan admin (nama, tahun ajaran, semester), 4 kartu statistik, 5 siswa teratas, dan daftar siswa Tidak Aktif."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoint untuk halaman utama Dashboard (sapaan admin, statistik, 5 siswa teratas, dan siswa tidak aktif)."
+    },
+    {
+      "name": "2. Data Siswa",
+      "item": [
+        {
+          "name": "Get All Students (Search & Pagination)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/{{api_prefix}}/students?page={{page}}&limit={{limit}}&search={{search_query}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "{{api_prefix}}",
+                "students"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}",
+                  "description": "Nomor halaman (default: 1)"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}",
+                  "description": "Jumlah baris per halaman: 5 atau 10"
+                },
+                {
+                  "key": "search",
+                  "value": "{{search_query}}",
+                  "description": "Pencarian berdasarkan nama, NIS, kelas, atau jenis kelamin"
+                }
+              ]
+            },
+            "description": "Mengambil daftar siswa dengan server-side pagination (5 atau 10 baris) dan pencarian."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Student",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const res = pm.response.json();",
+                  "    if (res.data && res.data.id) {",
+                  "        pm.collectionVariables.set(\"student_id\", res.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nis\": \"24251015\",\n  \"nama\": \"Raka Pratama\",\n  \"kelas\": \"XII RPL 1\",\n  \"jenis_kelamin\": \"Laki-laki\",\n  \"status\": \"Aktif\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/{{api_prefix}}/students",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "{{api_prefix}}",
+                "students"
+              ]
+            },
+            "description": "Menambahkan data siswa baru. Semua field wajib diisi dan NIS tidak boleh duplikat."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Student",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nis\": \"24251015\",\n  \"nama\": \"Raka Pratama Putra\",\n  \"kelas\": \"XII RPL 2\",\n  \"jenis_kelamin\": \"Laki-laki\",\n  \"status\": \"Tidak Aktif\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/{{api_prefix}}/students/{{student_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "{{api_prefix}}",
+                "students",
+                "{{student_id}}"
+              ]
+            },
+            "description": "Memperbarui data siswa berdasarkan UUID pada variabel {{student_id}}."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Student",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/{{api_prefix}}/students/{{student_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "{{api_prefix}}",
+                "students",
+                "{{student_id}}"
+              ]
+            },
+            "description": "Menghapus data siswa berdasarkan UUID pada variabel {{student_id}}."
+          },
+          "response": []
+        }
+      ],
+      "description": "CRUD Data Siswa beserta fitur pencarian (search) dan pagination (5 atau 10 baris)."
+    },
+    {
+      "name": "3. Pengaturan",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/{{api_prefix}}/settings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "{{api_prefix}}",
+                "settings"
+              ]
+            },
+            "description": "Mengambil informasi pengguna (admin_name, admin_email) dan informasi sekolah."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Settings",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"admin_name\": \"Danendra Athallah\",\n  \"admin_email\": \"danendra@smktelkom-mlg.sch.id\",\n  \"school_name\": \"SMK Telkom Malang\",\n  \"academic_year\": \"2026/2027\",\n  \"semester\": \"Genap\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/{{api_prefix}}/settings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "{{api_prefix}}",
+                "settings"
+              ]
+            },
+            "description": "Menyimpan perubahan informasi admin dan sekolah."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoint untuk membaca dan menyimpan pengaturan informasi admin dan sekolah."
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:1880"
+    },
+    {
+      "key": "api_prefix",
+      "value": "/nendra/dashboard"
+    },
+    {
+      "key": "auth_token",
+      "value": "GANTI_DENGAN_STATIC_TOKEN_DIRECTUS"
+    },
+    {
+      "key": "student_id",
+      "value": "550e8400-e29b-41d4-a716-446655440001"
+    },
+    {
+      "key": "page",
+      "value": "1"
+    },
+    {
+      "key": "limit",
+      "value": "5"
+    },
+    {
+      "key": "search_query",
+      "value": ""
+    }
+  ]
+}
